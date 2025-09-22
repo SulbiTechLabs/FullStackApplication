@@ -129,8 +129,9 @@ resource "aws_key_pair" "eks_key" {
 
 # Save the private key locally (Important!)
 resource "local_file" "private_key" {
-  content  = tls_private_key.eks_key.private_key_pem
-  filename = "${path.module}/cloudguru-key.pem" # This saves the key in the same Terraform module directory
+  content         = tls_private_key.eks_key.private_key_pem
+  filename        = "${path.module}/cloudguru-key.pem" # This saves the key in the same Terraform module directory
+  file_permission = "0600"
 }
 #endregion EC2 key-pair
 
@@ -181,11 +182,6 @@ module "eks" {
       desired_size = var.asg_desired_capacity_group
       
       disk_size = var.disk_size
-      
-      remote_access = {
-        ec2_ssh_key               = aws_key_pair.eks_key.key_name
-        source_security_group_ids = [aws_security_group.all_worker_mgmt.id]
-      }
       
       tags = {
         Environment    = var.environment
@@ -283,6 +279,11 @@ module "lb_role" {
 
   role_name                              = "AmazonEKSLoadBalancerControllerRole-${var.tag_region}-myproj"
   attach_load_balancer_controller_policy = true
+  
+  # Additional policies for missing permissions
+  role_policy_arns = {
+    additional = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+  }
 
   oidc_providers = {
     main = {
@@ -326,8 +327,11 @@ resource "helm_release" "alb-controller" {
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
   namespace  = "kube-system"
+  timeout    = 600
+  wait       = true
   depends_on = [
-    kubernetes_service_account.service-account
+    kubernetes_service_account.service-account,
+    module.eks.eks_managed_node_groups
   ]
 
   set = [
@@ -366,6 +370,11 @@ resource "helm_release" "argocd" {
   chart            = "argo-cd"
   namespace        = "argocd"
   create_namespace = true
+  timeout          = 600
+  wait             = true
+  depends_on = [
+    module.eks.eks_managed_node_groups
+  ]
 
   values = [
     <<EOF
