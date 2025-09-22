@@ -34,4 +34,5 @@ set-aws.credentials
 #pem file
 *.pem
 
-#dummyy
+#Git tag files
+Creat-Release-Tag.md
