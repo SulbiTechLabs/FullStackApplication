@@ -1,0 +1,208 @@
+# Create namespaces
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otel
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demoapp
+---
+# OpenTelemetry Collector
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: otel
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    
+    processors:
+      batch:
+    
+    exporters:
+      logging:
+        loglevel: debug
+      elasticsearch:
+        endpoints: ["OPENSEARCH_ENDPOINT"]
+        index: traces
+        mapping:
+          mode: none
+    
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [logging, elasticsearch]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: otel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:latest
+        args: ["--config=/etc/otel-collector-config.yaml"]
+        volumeMounts:
+        - name: config
+          mountPath: /etc/otel-collector-config.yaml
+          subPath: config.yaml
+        ports:
+        - containerPort: 4317
+        - containerPort: 4318
+      volumes:
+      - name: config
+        configMap:
+          name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: otel
+spec:
+  selector:
+    app: otel-collector
+  ports:
+  - name: grpc
+    port: 4317
+    targetPort: 4317
+  - name: http
+    port: 4318
+    targetPort: 4318
+---
+# Sample Python Flask App with OTEL auto-instrumentation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+  namespace: demoapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-app
+  template:
+    metadata:
+      labels:
+        app: flask-app
+    spec:
+      containers:
+      - name: flask-app
+        image: python:3.9-slim
+        command: ["/bin/bash"]
+        args:
+        - -c
+        - |
+          pip install flask opentelemetry-distro opentelemetry-exporter-otlp
+          opentelemetry-bootstrap -a install
+          cat > app.py << 'EOF'
+          from flask import Flask
+          import requests
+          import time
+          import random
+          
+          app = Flask(__name__)
+          
+          @app.route('/')
+          def hello():
+              return "Hello from Flask with OTEL!"
+          
+          @app.route('/api/data')
+          def get_data():
+              # Simulate some work
+              time.sleep(random.uniform(0.1, 0.5))
+              return {"message": "Data retrieved", "timestamp": time.time()}
+          
+          @app.route('/api/external')
+          def call_external():
+              # Simulate external API call
+              time.sleep(random.uniform(0.2, 0.8))
+              return {"external": "API response", "status": "success"}
+          
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=5000)
+          EOF
+          
+          export OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
+          export OTEL_SERVICE_NAME=flask-demo-app
+          export OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.otel.svc.cluster.local:4318
+          export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+          
+          opentelemetry-instrument python app.py
+        ports:
+        - containerPort: 5000
+        env:
+        - name: OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED
+          value: "true"
+        - name: OTEL_SERVICE_NAME
+          value: "flask-demo-app"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.otel.svc.cluster.local:4318"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-app
+  namespace: demoapp
+spec:
+  selector:
+    app: flask-app
+  ports:
+  - port: 5000
+    targetPort: 5000
+  type: LoadBalancer
+---
+# Traffic generator to create traces
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traffic-generator
+  namespace: demoapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traffic-generator
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      containers:
+      - name: traffic-generator
+        image: curlimages/curl:latest
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          while true; do
+            curl -s http://flask-app.demoapp.svc.cluster.local:5000/ || true
+            sleep 2
+            curl -s http://flask-app.demoapp.svc.cluster.local:5000/api/data || true
+            sleep 3
+            curl -s http://flask-app.demoapp.svc.cluster.local:5000/api/external || true
+            sleep 5
+          done
