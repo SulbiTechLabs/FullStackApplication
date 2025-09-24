@@ -3,25 +3,25 @@ module "rds" {
   source  = "terraform-aws-modules/rds/aws"
   version = "6.3.0"
 
-  identifier = "postgres-backend-db"
-  engine            = "postgres"
-  engine_version    = "15.14"
-  instance_class    = "db.t3.micro" # Free tier eligible
-  allocated_storage = 20
-  db_name           = "mydb"
-  username          = local.rds_creds.username
-  password          = local.rds_creds.password
-  port              = 5432
-  family            = "postgres15"
-  major_engine_version = "15"
-  publicly_accessible = false
-  multi_az           = false
-  storage_type       = "gp2"
-  vpc_security_group_ids = [aws_security_group.rds.id]
-  subnet_ids             = module.vpc.private_subnets
-  create_db_subnet_group = true
-  skip_final_snapshot    = true
-  backup_retention_period = 0
+  identifier                 = "postgres-backend-db"
+  engine                     = "postgres"
+  engine_version             = "15.14"
+  instance_class             = "db.t3.micro" # Free tier eligible
+  allocated_storage          = 20
+  db_name                    = "mydb"
+  username                   = local.rds_creds.username
+  password                   = local.rds_creds.password
+  port                       = 5432
+  family                     = "postgres15"
+  major_engine_version       = "15"
+  publicly_accessible        = false
+  multi_az                   = false
+  storage_type               = "gp2"
+  vpc_security_group_ids     = [aws_security_group.rds.id]
+  subnet_ids                 = module.vpc.private_subnets
+  create_db_subnet_group     = true
+  skip_final_snapshot        = true
+  backup_retention_period    = 0
   auto_minor_version_upgrade = true
 
   tags = {
@@ -40,8 +40,8 @@ module "rds" {
 
 # Security Group for RDS
 resource "aws_security_group" "rds" {
-  name        = "rds-postgres"
-  vpc_id      = module.vpc.vpc_id
+  name   = "rds-postgres"
+  vpc_id = module.vpc.vpc_id
 
   ingress {
     from_port       = 5432
@@ -67,7 +67,7 @@ resource "aws_security_group" "rds" {
 resource "aws_secretsmanager_secret" "rds_password" {
   name        = "rds-postgres-password"
   description = "RDS PostgreSQL password"
-  
+
   tags = {
     Name           = "RDS-Password-${var.tag_region}"
     Environment    = var.environment
@@ -91,7 +91,7 @@ resource "aws_secretsmanager_secret_version" "rds_password" {
 }
 
 data "aws_secretsmanager_secret_version" "rds_password" {
-  secret_id = aws_secretsmanager_secret.rds_password.id
+  secret_id  = aws_secretsmanager_secret.rds_password.id
   depends_on = [aws_secretsmanager_secret_version.rds_password]
 }
 
