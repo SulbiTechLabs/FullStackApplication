@@ -1,28 +1,28 @@
 # RDS PostgreSQL Instance
 module "rds" {
-  source  = "terraform-aws-modules/rds/aws"
-  version = "6.3.0"
-
-  identifier                 = "postgres-backend-db"
-  engine                     = "postgres"
-  engine_version             = "15.14"
-  instance_class             = "db.t3.micro" # Free tier eligible
-  allocated_storage          = 20
-  db_name                    = "mydb"
-  username                   = local.rds_creds.username
-  password                   = local.rds_creds.password
-  port                       = 5432
-  family                     = "postgres15"
-  major_engine_version       = "15"
-  publicly_accessible        = false
-  multi_az                   = false
-  storage_type               = "gp2"
-  vpc_security_group_ids     = [aws_security_group.rds.id]
-  subnet_ids                 = module.vpc.private_subnets
-  create_db_subnet_group     = true
-  skip_final_snapshot        = true
-  backup_retention_period    = 0
-  auto_minor_version_upgrade = true
+  source                      = "terraform-aws-modules/rds/aws"
+  version                     = "6.3.0"
+  identifier                  = "postgres-backend-db"
+  engine                      = "postgres"
+  engine_version              = "15.14"
+  instance_class              = "db.t3.micro" # Free tier eligible
+  allocated_storage           = 20
+  db_name                     = "postgres"
+  manage_master_user_password = false # Add this line to manage password via Secrets Manager
+  username                    = local.rds_creds.username
+  password                    = local.rds_creds.password
+  port                        = 5432
+  family                      = "postgres15"
+  major_engine_version        = "15"
+  publicly_accessible         = false
+  multi_az                    = false
+  storage_type                = "gp2"
+  vpc_security_group_ids      = [aws_security_group.rds.id]
+  subnet_ids                  = module.vpc.private_subnets
+  create_db_subnet_group      = true
+  skip_final_snapshot         = true
+  backup_retention_period     = 0
+  auto_minor_version_upgrade  = true
 
   tags = {
     Name           = "Postgres-${var.tag_region}-RDS"
@@ -47,7 +47,7 @@ resource "aws_security_group" "rds" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.all_worker_mgmt.id]
+    security_groups = [module.eks.node_security_group_id] # Use EKS node security group
     description     = "Allow PostgreSQL from EKS nodes"
   }
 
