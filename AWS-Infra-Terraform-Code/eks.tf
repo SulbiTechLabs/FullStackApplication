@@ -29,17 +29,13 @@ locals {
 
 #region VPC
 module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "5.15.0"
-
-  name = var.vpc_name
-
-  cidr = "192.168.0.0/16"
-  azs  = slice(data.aws_availability_zones.available.names, 0, 2)
-
-  private_subnets = ["192.168.0.0/18", "192.168.64.0/18"]
-  public_subnets  = ["192.168.128.0/18", "192.168.192.0/18"]
-
+  source                  = "terraform-aws-modules/vpc/aws"
+  version                 = "5.15.0"
+  name                    = var.vpc_name
+  cidr                    = "192.168.0.0/16"
+  azs                     = slice(data.aws_availability_zones.available.names, 0, 2)
+  private_subnets         = ["192.168.0.0/18", "192.168.64.0/18"]
+  public_subnets          = ["192.168.128.0/18", "192.168.192.0/18"]
   enable_nat_gateway      = true
   single_nat_gateway      = true
   enable_dns_hostnames    = true
@@ -67,10 +63,9 @@ resource "aws_security_group" "all_worker_mgmt" {
   vpc_id      = module.vpc.vpc_id
 
   ingress {
-    from_port = var.tcp_port
-    to_port   = var.tcp_port
-    protocol  = var.protocol
-
+    from_port   = var.tcp_port
+    to_port     = var.tcp_port
+    protocol    = var.protocol
     cidr_blocks = var.cidr_blocks_all_worker_groups
   }
 }
@@ -80,10 +75,9 @@ resource "aws_security_group" "all_worker_mgmt_one" {
   vpc_id      = module.vpc.vpc_id
 
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = -1
-
+    from_port   = 0
+    to_port     = 0
+    protocol    = -1
     cidr_blocks = var.cidr_blocks_all_worker_groups
   }
 }
@@ -92,9 +86,8 @@ resource "aws_security_group" "all_worker_mgmt_one" {
 #region KMS
 ####KMS Key Creation for EKS Cluster Encryption######
 module "kms" {
-  source  = "terraform-aws-modules/kms/aws"
-  version = "~> 1.5"
-
+  source                = "terraform-aws-modules/kms/aws"
+  version               = "~> 1.5"
   aliases               = ["eks/${var.cluster_name}"]
   description           = "${var.cluster_name} cluster encryption key"
   enable_default_policy = true
@@ -137,26 +130,21 @@ resource "local_file" "private_key" {
 
 #region EKS
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
-
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
-  
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.public_subnets
-
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
-  
+  source                                   = "terraform-aws-modules/eks/aws"
+  version                                  = "~> 20.0"
+  cluster_name                             = var.cluster_name
+  cluster_version                          = var.cluster_version
+  vpc_id                                   = module.vpc.vpc_id
+  subnet_ids                               = module.vpc.public_subnets
+  cluster_endpoint_public_access           = true
+  cluster_endpoint_private_access          = true
   enable_cluster_creator_admin_permissions = true
-  
-  create_kms_key = false
+  create_kms_key                           = false
   cluster_encryption_config = {
     resources        = ["secrets"]
     provider_key_arn = module.kms.key_arn
   }
-  
+
   cluster_addons = {
     coredns = {
       most_recent = true
@@ -171,18 +159,15 @@ module "eks" {
       most_recent = true
     }
   }
-  
+
   eks_managed_node_groups = {
     my_nodegroup = {
       name           = var.nodegroup_name
       instance_types = [var.instance_type]
-      
-      min_size     = var.asg_min_size_group
-      max_size     = var.asg_max_size_group
-      desired_size = var.asg_desired_capacity_group
-      
-      disk_size = var.disk_size
-      
+      min_size       = var.asg_min_size_group
+      max_size       = var.asg_max_size_group
+      desired_size   = var.asg_desired_capacity_group
+      disk_size      = var.disk_size
       tags = {
         Environment    = var.environment
         Region         = var.tag_region
@@ -197,7 +182,7 @@ module "eks" {
       }
     }
   }
-  
+
   tags = {
     Environment    = var.environment
     Name           = var.cluster_name
@@ -244,9 +229,8 @@ module "eks" {
 
 #region EBS CSI IRSA Role (correct v5.34.0+ syntax)
 module "ebs_csi_role" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "5.34.0"
-
+  source                = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version               = "5.34.0"
   role_name             = "AmazonEKS_EBS_CSI_DriverRole_${var.component}"
   attach_ebs_csi_policy = true
 
@@ -274,12 +258,11 @@ module "ebs_csi_role" {
 
 #region ALB Controller IRSA Role (correct v5.34.0+ syntax)
 module "lb_role" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "5.34.0"
-
+  source                                 = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version                                = "5.34.0"
   role_name                              = "AmazonEKSLoadBalancerControllerRole-${var.tag_region}-myproj"
   attach_load_balancer_controller_policy = true
-  
+
   # Additional policies for missing permissions
   role_policy_arns = {
     additional = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
