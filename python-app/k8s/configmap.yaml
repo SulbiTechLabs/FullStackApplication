@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: fullstack-app
+data:
+  DB_HOST: "postgres-backend-db.c6rguw6oq336.us-east-1.rds.amazonaws.com"
+  DB_NAME: "postgres"
+  DB_USER: "postgresadmin"
+  DB_PORT: "5432"
